@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id             String          @id @default(uuid())
+  email          String          @unique
+  passwordHash   String
+  role           String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  studentProfile StudentProfile?
+  companyProfile CompanyProfile?
+  adminProfile   AdminProfile?
+}
+
+// ---------------------------------------------------------------------------
+// Student Domain
+// ---------------------------------------------------------------------------
+
+model StudentProfile {
+  id               String           @id @default(uuid())
+  userId           String           @unique
+  user             User             @relation(fields: [userId], references: [id])
+  fullName         String
+  college          String?
+  graduationYear   Int?
+  gpa              Float?
+  resumeUrl        String?
+  certifications   String?          // SQLite fallback (comma-separated)
+  technicalSkills  String           // SQLite fallback (comma-separated)
+  preferredDomains String           // SQLite fallback (comma-separated)
+
+  jobApplications  JobApplication[]
+  examAttempts     ExamAttempt[]
+}
+
+// ---------------------------------------------------------------------------
+// Company & Jobs Domain
+// ---------------------------------------------------------------------------
+
+model CompanyProfile {
+  id          String       @id @default(uuid())
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id])
+  companyName String
+  description String?
+  website     String?
+  verified    Boolean      @default(false)
+
+  jobPostings JobPosting[]
+}
+
+model JobPosting {
+  id               String           @id @default(uuid())
+  companyId        String
+  company          CompanyProfile   @relation(fields: [companyId], references: [id])
+  title            String
+  description      String
+  domain           String           // e.g., 'AI/ML', 'Frontend', 'Backend'
+  requiredSkills   String           // SQLite fallback (comma-separated)
+  minGpa           Float?
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+
+  jobApplications  JobApplication[]
+  exams            Exam[]
+}
+
+model JobApplication {
+  id        String            @id @default(uuid())
+  studentId String
+  student   StudentProfile    @relation(fields: [studentId], references: [id])
+  jobId     String
+  job       JobPosting        @relation(fields: [jobId], references: [id])
+  status    String            @default("APPLIED")
+  appliedAt DateTime          @default(now())
+
+  @@unique([studentId, jobId])
+}
+
+// ---------------------------------------------------------------------------
+// Examination Domain
+// ---------------------------------------------------------------------------
+
+model Exam {
+  id             String        @id @default(uuid())
+  jobId          String
+  job            JobPosting    @relation(fields: [jobId], references: [id])
+  title          String
+  durationMin    Int           @default(60)
+  passingScore   Float?
+
+  questions      Question[]
+  examAttempts   ExamAttempt[]
+}
+
+model Question {
+  id            String       @id @default(uuid())
+  examId        String
+  exam          Exam         @relation(fields: [examId], references: [id])
+  type          String
+  text          String
+  options       String?      // Storing stringified JSON for SQLite
+  correctAnswer String?      // For objective
+  maxScore      Float        @default(10.0)
+  domain        String?      // Question domain type (e.g. 'Aptitude', 'AI/ML')
+  difficulty    String?      // difficulty level
+
+  answers       Answer[]
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation & Proctoring Domain
+// ---------------------------------------------------------------------------
+
+model ExamAttempt {
+  id          String        @id @default(uuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [id])
+  examId      String
+  exam        Exam          @relation(fields: [examId], references: [id])
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+  totalScore  Float?
+  status      String        @default("IN_PROGRESS")
+
+  answers        Answer[]
+  proctoringLogs ProctoringLog[]
+}
+
+model Answer {
+  id            String      @id @default(uuid())
+  attemptId     String
+  attempt       ExamAttempt @relation(fields: [attemptId], references: [id])
+  questionId    String
+  question      Question    @relation(fields: [questionId], references: [id])
+  responseText  String
+  scoreEarned   Float?
+  aiFeedback    String?
+  needsReview   Boolean     @default(false)
+}
+
+model ProctoringLog {
+  id          String        @id @default(uuid())
+  attemptId   String
+  attempt     ExamAttempt   @relation(fields: [attemptId], references: [id])
+  eventType   String        // e.g., 'TAB_SWITCH', 'MULTIPLE_FACES'
+  severity    String
+  timestamp   DateTime      @default(now())
+  details     String?       // Changed to string for SQLite (stringified JSON)
+}
+
+model AdminProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+  name   String
+}
